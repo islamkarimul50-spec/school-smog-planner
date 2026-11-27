@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import {
   HOME_PURIFIER_LABELS,
   HOME_VENTILATION_LABELS,
@@ -33,6 +33,7 @@ export function HouseholdForm({
 }: HouseholdFormProps) {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const errorSummaryRef = useRef<HTMLDivElement>(null);
 
   function updateTravelOption(modeId: TravelModeId, checked: boolean) {
     onChange({
@@ -60,6 +61,7 @@ export function HouseholdForm({
         parsed.error.issues[0]?.message ??
           'Please fix the highlighted fields before generating your plan.'
       );
+      queueMicrotask(() => errorSummaryRef.current?.focus());
       return;
     }
 
@@ -73,7 +75,12 @@ export function HouseholdForm({
       <h2 id="household-form-heading">Household Constraints &amp; Options</h2>
 
       {summaryError && (
-        <div className="alert alert--danger" role="alert">
+        <div
+          ref={errorSummaryRef}
+          tabIndex={-1}
+          className="alert alert--danger"
+          role="alert"
+        >
           <strong>Check form inputs:</strong> {summaryError}
         </div>
       )}

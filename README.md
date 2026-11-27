@@ -40,7 +40,7 @@ The application strictly separates **external services**, **deterministic decisi
 ### Journey from Input to Result
 1. User inputs are validated on both client and server via `HouseholdInputSchema` (`src/shared/validation.ts`), verifying `earliestReadyTime < schoolStartTime`, `commuteDurationMinutes` (`5–180`), and `dailyBudget` (`0–100,000`).
 2. `buildMorningPlan` (`src/shared/decisionEngine.ts`) computes `availableWindowMinutes = schoolStartMinutes - earliestReadyMinutes` and normalizes budget to INR (`convertCurrencyToInr`).
-3. `evaluateAllTravelOptions` evaluates all five modes (`schoolBus`, `metroOrPublicTransit`, `carpool`, `walkOrCycle`, `privateCar`) through one shared rule path (`checkTravelConstraints`).
+3. `evaluateAllTravelOptions` evaluates all five modes (`schoolBus`, `metroOrPublicTransit`, `carpool`, `walkOrCycle`, `privateCar`) through one shared rule path (`checkTravelConstraints`), recording per-mode `TravelConstraintChecks` (`availability`, `budget`, `timing`, `airQualitySafety`, `activeDuration`).
 4. **Exact function handling bus availability:**
    - **Function:** [`evaluateBusAvailability`](src/shared/decisionEngine.ts) in `src/shared/decisionEngine.ts`.
    - It checks `input.travelOptions.schoolBus`, bus daily cost (`₹60/day`) against `dailyBudgetInr`, and door-to-door time (`round(commuteDurationMinutes × 1.15) + 5 min`) against `availableWindowMinutes`.
@@ -48,7 +48,7 @@ The application strictly separates **external services**, **deterministic decisi
      - `evaluateBusAvailability accepts Shared School Bus when available, affordable, and on time` in [`tests/decisionEngine.test.ts`](tests/decisionEngine.test.ts)
      - `selects Shared School Bus when available, then switches cleanly when ONLY bus availability changes to false` in [`tests/decisionEngine.test.ts`](tests/decisionEngine.test.ts)
 5. Feasible modes are ranked by `smogPriority` when `PM2.5 > 55.4 µg/m³` (favoring enclosed high-consolidation transit) or `cleanAirPriority` when `PM2.5 <= 55.4 µg/m³` (favoring zero-emission walking/cycling within duration caps).
-6. If zero travel modes pass all rules, `routineStatus` becomes `'NO_FEASIBLE_OPTION'`, listing each mode's disqualification reason and actionable constraint-change prompts asking the parent which constraint can change.
+6. If zero travel modes pass all rules, `routineStatus` becomes `'NO_FEASIBLE_OPTION'`, listing each mode's disqualification reason. `buildConstraintConflictPrompts` reuses the same `TravelConstraintChecks` via `failsOnlyConstraint` so single-constraint suggestions (such as leaving earlier) are shown only when that single change genuinely unlocks the mode (verified by regression tests in [`tests/decisionEngine.test.ts`](tests/decisionEngine.test.ts)).
 7. Remaining budget (`dailyBudgetInr - allocatedTravelCostInr`) and home setup (`homePurifier`, `homeVentilation`) determine the **Indoor Air Quality** recommendation, while active transit/smog conditions shape the **Sustainable Community Alternative**.
 8. `computePlanDiff` compares the previous plan snapshot against the new plan to surface **what changed**, **what stayed relevant**, and **why**.
 
@@ -96,7 +96,7 @@ Then open `http://localhost:3000` (or the configured `PORT`).
 - **Live Air Quality & Geocoding:** [Open-Meteo Geocoding API](https://geocoding-api.open-meteo.com/v1/search) and [Open-Meteo Air Quality API](https://air-quality-api.open-meteo.com/v1/air-quality) (`current=pm2_5,pm10,us_aqi`, units `µg/m³` and `US AQI`). Query alias normalization maps `Delhi-NCR` to `New Delhi`. Responses are cached for 15 minutes on the server and flagged stale if older than 3 hours.
 - **AQI Category Classification:** Revised May 2024 US EPA 24-hour `PM2.5` AQI breakpoints implemented in [`src/shared/airQualityUtils.ts`](src/shared/airQualityUtils.ts).
 - **Sample & Manual Fallbacks:** Explicitly labeled sample presets (`Delhi-NCR Winter Inversion 245 µg/m³`, `Moderate Urban 38 µg/m³`, `Clean Morning 8.5 µg/m³`) and parent-entered manual `PM2.5` readings (`POST /api/air-quality/manual`).
-- **Generative AI:** Google Gemini via the official `@google/genai` SDK (defaults to `gemini-3.5-flash-lite`, configurable via `GEMINI_MODEL`), executed strictly server-side with a 10-second timeout and deterministic labeled fallback.
+- **Generative AI:** Google Gemini via the official `@google/genai` SDK (defaults to `gemini-3.5-flash-lite`, configurable via `GEMINI_MODEL`), executed strictly server-side with an `AbortSignal`-backed 18-second timeout, non-PII failure classification (`timeout`, `rate_limit`, `config_error`, `provider_error`), one transient retry on `429`/`5xx`, and a clearly labeled deterministic fallback (covered in [`tests/geminiService.test.ts`](tests/geminiService.test.ts)).
 
 ---
 

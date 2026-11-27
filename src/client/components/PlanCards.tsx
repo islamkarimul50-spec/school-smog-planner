@@ -163,7 +163,7 @@ export function PlanCards({ plan, aiExplanation, currency }: PlanCardsProps) {
           <strong>{plan.airQualitySnapshot.pm25UgM3.toFixed(1)} µg/m³</strong>
         </p>
         <div className="table-scroll">
-          <table className="eval-table">
+          <table className="eval-table" aria-labelledby="travel-eval-heading">
             <thead>
               <tr>
                 <th scope="col">Travel Option</th>

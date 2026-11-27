@@ -24,6 +24,7 @@ export const AIR_QUALITY_STALE_THRESHOLD_MS = 3 * 60 * 60 * 1000;
 export const PM25_MASK_RECOMMENDED_UG_M3 = 35.5; // US AQI > 100 (USG+)
 export const PM25_ACTIVE_COMMUTE_CAP_UG_M3 = 55.4; // Above this (>150 US AQI) is Unhealthy for all
 export const PM25_SENSITIVE_ACTIVE_CAP_UG_M3 = 35.4; // Stricter cap (>100 US AQI) for sensitive children
+export const PM25_VERY_UNHEALTHY_THRESHOLD_UG_M3 = 125.4; // Above this (>200 US AQI) is Very Unhealthy+
 export const US_AQI_ACTIVE_COMMUTE_CAP = 150;
 export const US_AQI_SENSITIVE_ACTIVE_CAP = 100;
 export const ACTIVE_COMMUTE_MAX_MINUTES = 25;

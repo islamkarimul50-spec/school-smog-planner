@@ -99,6 +99,39 @@ describe('GeminiCoachService diagnostics & timing consistency', () => {
     expect(JSON.stringify(warnSpy.mock.calls[0])).not.toContain('AIzaDummy');
   });
 
+  it('aborts and falls back cleanly when Gemini exceeds timeoutMs', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let observedAbort = false;
+    const slowClient: GeminiClientLike = {
+      generateText: vi.fn(
+        ({ abortSignal }) =>
+          new Promise<string>((resolve) => {
+            abortSignal?.addEventListener('abort', () => {
+              observedAbort = true;
+            });
+            setTimeout(() => resolve('Too late'), 150);
+          })
+      )
+    };
+
+    const service = new GeminiCoachService({
+      client: slowClient,
+      timeoutMs: 25,
+      retryDelayMs: 0
+    });
+
+    const plan = buildMorningPlan(DEFAULT_HOUSEHOLD_INPUT, DEL_AQ);
+    const result = await service.explainMorningPlan(
+      DEFAULT_HOUSEHOLD_INPUT,
+      plan,
+      null
+    );
+
+    expect(observedAbort).toBe(true);
+    expect(result.usedFallback).toBe(true);
+    expect(result.note).toContain('timed out');
+  });
+
   it('passes computed availableWindowMinutes and baselineCommuteDurationMinutes to Gemini and updates fallback timing answers when inputs change', async () => {
     const capturedPayloads: string[] = [];
     const mockClient: GeminiClientLike = {

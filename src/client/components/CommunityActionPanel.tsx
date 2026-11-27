@@ -134,7 +134,7 @@ export function CommunityActionPanel({
       </p>
 
       {livePiiHits.length > 0 && (
-        <div className="alert alert--danger" role="alert">
+        <div id="community-pii-alert" className="alert alert--danger" role="alert">
           <strong>Privacy Guard Warning:</strong> Remove {livePiiHits.join(', ')}{' '}
           before posting or copying.
         </div>
@@ -209,6 +209,9 @@ export function CommunityActionPanel({
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             aria-invalid={livePiiHits.length > 0}
+            aria-describedby={
+              livePiiHits.length > 0 ? 'community-pii-alert' : undefined
+            }
           />
         </div>
 

@@ -1,10 +1,12 @@
 import {
   ASSUMED_MOTORIZED_SPEED_KM_PER_HOUR,
+  HOME_VENTILATION_LABELS,
   IAQ_ACTION_COSTS_INR,
   INR_PER_USD,
   PM25_ACTIVE_COMMUTE_CAP_UG_M3,
   PM25_MASK_RECOMMENDED_UG_M3,
   PM25_SENSITIVE_ACTIVE_CAP_UG_M3,
+  PM25_VERY_UNHEALTHY_THRESHOLD_UG_M3,
   SOLO_CAR_EMISSION_KG_PER_KM,
   TRAVEL_MODE_ORDER,
   TRAVEL_MODE_SPECS,
@@ -197,13 +199,13 @@ function computeExposureRiskLevel(
   enclosedCabin: boolean,
   pm25UgM3: number
 ): 'Low' | 'Moderate' | 'High' {
-  if (pm25UgM3 <= 35.4) {
+  if (pm25UgM3 <= PM25_SENSITIVE_ACTIVE_CAP_UG_M3) {
     return 'Low';
   }
-  if (!enclosedCabin && pm25UgM3 > 55.4) {
+  if (!enclosedCabin && pm25UgM3 > PM25_ACTIVE_COMMUTE_CAP_UG_M3) {
     return 'High';
   }
-  if (pm25UgM3 > 125.4) {
+  if (pm25UgM3 > PM25_VERY_UNHEALTHY_THRESHOLD_UG_M3) {
     return enclosedCabin ? 'Moderate' : 'High';
   }
   return 'Moderate';
@@ -211,14 +213,17 @@ function computeExposureRiskLevel(
 
 function selectBestTravelOption(
   evaluations: TravelOptionEvaluation[],
-  pm25UgM3: number
+  pm25UgM3: number,
+  usAqi?: number
 ): TravelOptionEvaluation | null {
   const feasible = evaluations.filter((item) => item.feasible);
   if (feasible.length === 0) {
     return null;
   }
 
-  const isPollutedMorning = pm25UgM3 > PM25_ACTIVE_COMMUTE_CAP_UG_M3;
+  const isPollutedMorning =
+    pm25UgM3 > PM25_ACTIVE_COMMUTE_CAP_UG_M3 ||
+    (typeof usAqi === 'number' && usAqi > US_AQI_ACTIVE_COMMUTE_CAP);
   feasible.sort((a, b) => {
     const specA = TRAVEL_MODE_SPECS[a.modeId];
     const specB = TRAVEL_MODE_SPECS[b.modeId];
@@ -427,7 +432,7 @@ function buildRoutineRecommendation(
     .filter((item) => item.modeId !== selected.modeId)
     .map((item) =>
       item.feasible
-        ? `${item.label} (feasible, ranked lower for ${airQuality.pm25UgM3 > 55.4 ? 'smog protection/consolidation' : 'cost'})`
+        ? `${item.label} (feasible, ranked lower for ${airQuality.pm25UgM3 > PM25_ACTIVE_COMMUTE_CAP_UG_M3 ? 'smog protection/consolidation' : 'cost'})`
         : `${item.label} (excluded: ${item.rejectionReasons[0]})`
     )
     .slice(0, 3)
@@ -471,6 +476,36 @@ function buildRoutineRecommendation(
   };
 }
 
+function buildIaqRecommendationBlock(params: {
+  title: string;
+  whatToDo: string;
+  whyItFits: string;
+  emissionsDifference: string;
+  personalExposureDifference: string;
+  draftGuidance: string;
+  extraChecklist: string[];
+  assumptions: AssumptionEntry[];
+  remainingBudgetInr: number;
+  currency: BudgetCurrency;
+}): RecommendationBlock {
+  return {
+    id: 'indoor',
+    title: params.title,
+    whatToDo: params.whatToDo,
+    whyItFits: params.whyItFits,
+    emissionsDifference: params.emissionsDifference,
+    personalExposureDifference: params.personalExposureDifference,
+    actionChecklist: [params.draftGuidance, ...params.extraChecklist],
+    assumptions: [
+      ...params.assumptions,
+      {
+        label: 'Remaining daily budget after travel',
+        value: formatCurrencyFromInr(params.remainingBudgetInr, params.currency)
+      }
+    ]
+  };
+}
+
 function buildIndoorAirQualityRecommendation(
   input: HouseholdInput,
   airQuality: AirQualityReading,
@@ -478,7 +513,9 @@ function buildIndoorAirQualityRecommendation(
 ): RecommendationBlock {
   const currency: BudgetCurrency = input.budgetCurrency;
   const pm25 = airQuality.pm25UgM3;
-  const isHighSmog = pm25 > 55.4;
+  const isHighSmog = pm25 > PM25_ACTIVE_COMMUTE_CAP_UG_M3;
+  const ventilationLabel =
+    HOME_VENTILATION_LABELS[input.homeVentilation].toLowerCase();
 
   const draftGuidance =
     input.homeVentilation === 'drafty_windows'
@@ -493,19 +530,18 @@ function buildIndoorAirQualityRecommendation(
       IAQ_ACTION_COSTS_INR.hepaOperationDaily,
       currency
     );
-    return {
-      id: 'indoor',
+    return buildIaqRecommendationBlock({
       title: 'Indoor Air Quality: HEPA Clean-Room Pre-Filtration + Window Sealing',
       whatToDo: affordable
         ? `Run your portable HEPA purifier on Medium-High in the child’s sleeping/morning prep room 45 minutes before waking (${estCostDisplay} est. electricity + filter share), and keep doors shut.`
         : `Run your portable HEPA purifier on Low/Sleep mode in a single closed bedroom (prioritizing sleeping hours) while wet-wiping dust and sealing drafts.`,
-      whyItFits: `Tailored to your existing HEPA purifier, ${input.homeVentilation.replace('_', ' ')}, outdoor PM2.5 of ${pm25.toFixed(1)} µg/m³, and ${formatCurrencyFromInr(remainingBudgetInr, currency)} remaining daily budget after travel.`,
+      whyItFits: `Tailored to your existing HEPA purifier, ${ventilationLabel}, outdoor PM2.5 of ${pm25.toFixed(1)} µg/m³, and ${formatCurrencyFromInr(remainingBudgetInr, currency)} remaining daily budget after travel.`,
       emissionsDifference:
         'Using one single-room HEPA unit (~35W) adds minimal electricity demand (~0.03 kg CO2e/morning) compared with whole-house heating/filtration.',
       personalExposureDifference:
         'Reduces indoor PM2.5 inside the child’s prep room directly before school, cutting baseline overnight and morning lung burden — unlike outdoor transit choices which only help once outside.',
-      actionChecklist: [
-        draftGuidance,
+      draftGuidance,
+      extraChecklist: [
         'Avoid incense, candles, or frying without kitchen exhaust during morning prep.',
         'Wet-mop hard floors instead of dry sweeping so settled fine dust is not resuspended.'
       ],
@@ -517,13 +553,11 @@ function buildIndoorAirQualityRecommendation(
         {
           label: 'Morning pre-filtration electricity CO2e',
           value: '0.035 kW × 1 h pre-school run = 0.035 kWh × ~0.82 kg CO2e/kWh grid factor ≈ 0.03 kg CO2e'
-        },
-        {
-          label: 'Remaining daily budget after travel',
-          value: formatCurrencyFromInr(remainingBudgetInr, currency)
         }
-      ]
-    };
+      ],
+      remainingBudgetInr,
+      currency
+    });
   }
 
   if (
@@ -534,20 +568,19 @@ function buildIndoorAirQualityRecommendation(
       IAQ_ACTION_COSTS_INR.diyFilterUpkeep,
       currency
     );
-    return {
-      id: 'indoor',
+    return buildIaqRecommendationBlock({
       title: 'Indoor Air Quality: Single-Room Box-Fan MERV-13 Filtration + Draft Seal',
       whatToDo:
         input.homePurifier === 'diy_box_fan'
           ? `Run your DIY box-fan MERV-13 filter in the child’s closed bedroom during morning prep (${diyCostDisplay} upkeep share) and seal window gaps.`
           : `Use ${diyCostDisplay} of your ${formatCurrencyFromInr(remainingBudgetInr, currency)} remaining daily budget toward a single-room DIY box-fan + MERV-13 filter setup alongside zero-cost draft sealing.`,
-      whyItFits: `Matches your home without a commercial HEPA purifier, addresses ${input.homeVentilation.replace('_', ' ')}, and stays inside your ${formatCurrencyFromInr(remainingBudgetInr, currency)} post-travel budget.`,
+      whyItFits: `Matches your home without a commercial HEPA purifier, addresses ${ventilationLabel}, and stays inside your ${formatCurrencyFromInr(remainingBudgetInr, currency)} post-travel budget.`,
       emissionsDifference:
         'A standard 45W fan + MERV-13 filter extends hardware life and keeps daily energy use low.',
       personalExposureDifference:
         'Directly lowers indoor fine particulate inhalation during the 10–14 hours a child spends at home, especially if windows are leaky during severe morning smog.',
-      actionChecklist: [
-        draftGuidance,
+      draftGuidance,
+      extraChecklist: [
         'Keep kitchen exhaust on (or cover pans) during morning breakfast prep.',
         'Wet-wipe study table and bedside surfaces; avoid dry dusting.'
       ],
@@ -555,27 +588,24 @@ function buildIndoorAirQualityRecommendation(
         {
           label: 'DIY MERV-13 filter amortized cost',
           value: `${diyCostDisplay} (filter + fan cost amortized over ~90 winter smog days)`
-        },
-        {
-          label: 'Remaining daily budget after travel',
-          value: formatCurrencyFromInr(remainingBudgetInr, currency)
         }
-      ]
-    };
+      ],
+      remainingBudgetInr,
+      currency
+    });
   }
 
-  return {
-    id: 'indoor',
+  return buildIaqRecommendationBlock({
     title: 'Indoor Air Quality: Zero-Cost Inversion Timing & Source Control',
     whatToDo:
       'Seal bedroom window gaps with damp cloth/towels before 06:00, halt indoor smoke/frying aerosols during morning prep, and ventilate only if afternoon PM2.5 drops.',
-    whyItFits: `Requires ${formatCurrencyFromInr(0, currency)} cash outlay, matching your ${formatCurrencyFromInr(remainingBudgetInr, currency)} post-travel budget and ${input.homeVentilation.replace('_', ' ')} setup.`,
+    whyItFits: `Requires ${formatCurrencyFromInr(0, currency)} cash outlay, matching your ${formatCurrencyFromInr(remainingBudgetInr, currency)} post-travel budget and ${ventilationLabel} setup.`,
     emissionsDifference:
       'Zero additional electricity consumption while cutting indoor combustion spikes.',
     personalExposureDifference:
       'Prevents morning outdoor smog intrusion and indoor cooking PM2.5 peaks in the child’s breathing zone at zero cost.',
-    actionChecklist: [
-      draftGuidance,
+    draftGuidance,
+    extraChecklist: [
       'Wet-mop floors instead of dry sweeping before the child wakes.',
       'Hold outdoor balcony/courtyard play until afternoon mixing lowers ambient PM2.5.'
     ],
@@ -583,13 +613,11 @@ function buildIndoorAirQualityRecommendation(
       {
         label: 'Behavioral & draft-sealing cost',
         value: `${formatCurrencyFromInr(0, currency)} using household materials`
-      },
-      {
-        label: 'Remaining daily budget after travel',
-        value: formatCurrencyFromInr(remainingBudgetInr, currency)
       }
-    ]
-  };
+    ],
+    remainingBudgetInr,
+    currency
+  });
 }
 
 function buildSustainableAlternativeRecommendation(
@@ -675,7 +703,11 @@ export function buildMorningPlan(
     airQuality.pm25UgM3,
     airQuality.usAqi
   );
-  const selected = selectBestTravelOption(evaluations, airQuality.pm25UgM3);
+  const selected = selectBestTravelOption(
+    evaluations,
+    airQuality.pm25UgM3,
+    airQuality.usAqi
+  );
 
   const allocatedTravelCostInr = selected ? selected.estimatedCostInr : 0;
   const remainingBudgetInr = Math.max(0, dailyBudgetInr - allocatedTravelCostInr);
@@ -725,21 +757,11 @@ export function buildMorningPlan(
   };
 }
 
-/**
- * Computes a human-readable diff between a previous plan and the new plan
- * so parents clearly see what changed, what stayed relevant, and why.
- */
-export function computePlanDiff(
-  previous: PreviousPlanSummaryInput | undefined,
-  current: MorningPlan,
+function collectChangedInputs(
+  prevIn: HouseholdInput,
   currentInput: HouseholdInput
-): PlanDiff | null {
-  if (!previous) {
-    return null;
-  }
-
+): string[] {
   const changedInputs: string[] = [];
-  const prevIn = previous.householdInput;
 
   if (prevIn.city !== currentInput.city) {
     changedInputs.push(`City: ${prevIn.city} → ${currentInput.city}`);
@@ -781,6 +803,60 @@ export function computePlanDiff(
     );
   }
 
+  return changedInputs;
+}
+
+function buildWhyPlanChanged(
+  previous: PreviousPlanSummaryInput,
+  current: MorningPlan,
+  currentInput: HouseholdInput,
+  changedInputs: string[]
+): string {
+  if (
+    previous.selectedModeId === 'schoolBus' &&
+    !currentInput.travelOptions.schoolBus
+  ) {
+    const busEval = current.evaluatedTravelOptions.find(
+      (e) => e.modeId === 'schoolBus'
+    );
+    const busReason =
+      busEval?.rejectionReasons[0] ?? 'School Bus marked unavailable.';
+    return current.selectedModeLabel
+      ? `${busReason} The solver selected ${current.selectedModeLabel} as the next lowest-emission enclosed option fitting your ${currentInput.schoolStartTime} bell and ${formatCurrencyFromInr(current.dailyBudgetInr, currentInput.budgetCurrency)} budget.`
+      : `${busReason} No remaining enabled travel option satisfied all timing, budget, and smog safety constraints.`;
+  }
+
+  if (current.routineStatus === 'NO_FEASIBLE_OPTION') {
+    return (
+      current.conflictExplanation ??
+      'Updated constraints left no travel mode feasible.'
+    );
+  }
+
+  if (changedInputs.length > 0 && current.selectedModeLabel) {
+    return `After updating (${changedInputs.join('; ')}), ${current.selectedModeLabel} became the top-ranked feasible choice under your active rules.`;
+  }
+
+  return 'Plan recalculated using your latest household inputs.';
+}
+
+/**
+ * Computes a human-readable diff between a previous plan and the new plan
+ * so parents clearly see what changed, what stayed relevant, and why.
+ */
+export function computePlanDiff(
+  previous: PreviousPlanSummaryInput | undefined,
+  current: MorningPlan,
+  currentInput: HouseholdInput
+): PlanDiff | null {
+  if (!previous) {
+    return null;
+  }
+
+  const changedInputs = collectChangedInputs(
+    previous.householdInput,
+    currentInput
+  );
   const whatChanged: string[] = [];
   const whatStayedRelevant: string[] = [];
 
@@ -823,31 +899,16 @@ export function computePlanDiff(
     );
   }
 
-  let whyItChanged = 'Plan recalculated using your latest household inputs.';
-  if (
-    previous.selectedModeId === 'schoolBus' &&
-    !currentInput.travelOptions.schoolBus
-  ) {
-    const busEval = current.evaluatedTravelOptions.find(
-      (e) => e.modeId === 'schoolBus'
-    );
-    const busReason = busEval?.rejectionReasons[0] ?? 'School Bus marked unavailable.';
-    whyItChanged = current.selectedModeLabel
-      ? `${busReason} The solver selected ${current.selectedModeLabel} as the next lowest-emission enclosed option fitting your ${currentInput.schoolStartTime} bell and ${formatCurrencyFromInr(current.dailyBudgetInr, currentInput.budgetCurrency)} budget.`
-      : `${busReason} No remaining enabled travel option satisfied all timing, budget, and smog safety constraints.`;
-  } else if (current.routineStatus === 'NO_FEASIBLE_OPTION') {
-    whyItChanged =
-      current.conflictExplanation ??
-      'Updated constraints left no travel mode feasible.';
-  } else if (changedInputs.length > 0 && current.selectedModeLabel) {
-    whyItChanged = `After updating (${changedInputs.join('; ')}), ${current.selectedModeLabel} became the top-ranked feasible choice under your active rules.`;
-  }
-
   return {
     hasPreviousPlan: true,
     changedInputs,
     whatChanged,
     whatStayedRelevant,
-    whyItChanged
+    whyItChanged: buildWhyPlanChanged(
+      previous,
+      current,
+      currentInput,
+      changedInputs
+    )
   };
 }

@@ -25,7 +25,9 @@ interface RateBucket {
 
 export function sanitizeErrorMessage(err: unknown): string {
   const raw = err instanceof Error ? err.message : 'Unexpected server error.';
-  return raw.replace(/AIza[0-9A-Za-z\-_]{20,}/g, '[REDACTED_KEY]');
+  return raw
+    .replace(/AIza[0-9A-Za-z\-_]{20,}/g, '[REDACTED_KEY]')
+    .replace(/Bearer\s+[A-Za-z0-9\-_.]{12,}/gi, 'Bearer [REDACTED]');
 }
 
 export function createApp(deps?: AppDependencies): {
@@ -47,6 +49,10 @@ export function createApp(deps?: AppDependencies): {
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('Permissions-Policy', 'geolocation=()');
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    );
     next();
   });
 
@@ -57,6 +63,13 @@ export function createApp(deps?: AppDependencies): {
   app.use('/api', (req, res, next) => {
     const ip = req.ip || 'local';
     const now = Date.now();
+    if (rateBuckets.size > 1000) {
+      for (const [key, entry] of rateBuckets.entries()) {
+        if (entry.resetAtMs <= now) {
+          rateBuckets.delete(key);
+        }
+      }
+    }
     const current = rateBuckets.get(ip);
     if (!current || current.resetAtMs <= now) {
       rateBuckets.set(ip, { count: 1, resetAtMs: now + 60_000 });

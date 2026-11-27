@@ -13,11 +13,13 @@ import type {
   MorningPlan,
   PlanDiff
 } from '../../shared/types.js';
+import { BoundedTtlCache } from './boundedCache.js';
 
 const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash-lite';
 const GEMINI_TIMEOUT_MS = 18000;
 const DEFAULT_TRANSIENT_RETRY_DELAY_MS = 300;
 const PLAN_EXPLANATION_CACHE_TTL_MS = 5 * 60 * 1000;
+const MAX_EXPLANATION_CACHE_ENTRIES = 100;
 
 export type GeminiFailureCategory =
   | 'timeout'
@@ -201,10 +203,9 @@ export class GeminiCoachService {
   private readonly client: GeminiClientLike | null;
   private readonly timeoutMs: number;
   private readonly retryDelayMs: number;
-  private readonly explanationCache = new Map<
-    string,
-    { result: AiExplanationResult; expiresAtMs: number }
-  >();
+  private readonly explanationCache = new BoundedTtlCache<AiExplanationResult>(
+    MAX_EXPLANATION_CACHE_ENTRIES
+  );
 
   constructor(options?: {
     apiKey?: string;
@@ -273,8 +274,8 @@ export class GeminiCoachService {
     });
 
     const cached = this.explanationCache.get(cacheKey);
-    if (cached && cached.expiresAtMs > Date.now()) {
-      return cached.result;
+    if (cached) {
+      return cached;
     }
 
     const selectedEval = plan.evaluatedTravelOptions.find(
@@ -346,10 +347,11 @@ export class GeminiCoachService {
       usedFallback: false,
       note: null
     };
-    this.explanationCache.set(cacheKey, {
+    this.explanationCache.set(
+      cacheKey,
       result,
-      expiresAtMs: Date.now() + PLAN_EXPLANATION_CACHE_TTL_MS
-    });
+      PLAN_EXPLANATION_CACHE_TTL_MS
+    );
     return result;
   }
 

@@ -110,4 +110,37 @@ describe('AirQualityService (mocked upstream fetch)', () => {
       expect(result.message).toContain('sample');
     }
   });
+
+  it('returns NOT_FOUND, INVALID_RESPONSE, and network-timeout errors cleanly', async () => {
+    const emptyGeoService = new AirQualityService({
+      fetchImpl: vi.fn(async () => new Response(JSON.stringify({ results: [] }), { status: 200 })) as typeof fetch
+    });
+    const notFound = await emptyGeoService.getAirQualityForCity('Atlantis');
+    expect(notFound.ok).toBe(false);
+    if (!notFound.ok) expect(notFound.code).toBe('NOT_FOUND');
+
+    const malformedAqService = new AirQualityService({
+      fetchImpl: vi.fn(async (input: string | URL | Request) => {
+        if (String(input).includes('geocoding')) {
+          return new Response(
+            JSON.stringify({ results: [{ name: 'Delhi', latitude: 28.6, longitude: 77.2 }] }),
+            { status: 200 }
+          );
+        }
+        return new Response(JSON.stringify({ current: {} }), { status: 200 });
+      }) as typeof fetch
+    });
+    const invalidRes = await malformedAqService.getAirQualityForCity('Delhi');
+    expect(invalidRes.ok).toBe(false);
+    if (!invalidRes.ok) expect(invalidRes.code).toBe('INVALID_RESPONSE');
+
+    const abortService = new AirQualityService({
+      fetchImpl: vi.fn(async () => {
+        throw new DOMException('Aborted', 'AbortError');
+      }) as typeof fetch
+    });
+    const timedOut = await abortService.getAirQualityForCity('Delhi');
+    expect(timedOut.ok).toBe(false);
+    if (!timedOut.ok) expect(timedOut.code).toBe('UPSTREAM_UNAVAILABLE');
+  });
 });

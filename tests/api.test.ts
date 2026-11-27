@@ -330,6 +330,12 @@ describe('Express API integration (offline, repeatable without live API keys)', 
     expect(
       sanitizeErrorMessage(new Error(`Failed using ${syntheticKeyPattern}`))
     ).toBe('Failed using [REDACTED_KEY]');
+    expect(
+      sanitizeErrorMessage(new Error('Auth failed: Bearer secret_token_123456'))
+    ).toBe('Auth failed: Bearer [REDACTED]');
+    expect(aqFailRes.headers['content-security-policy']).toContain(
+      "default-src 'self'"
+    );
 
     const manualAqRes = await invokeApp(app, 'POST', '/api/air-quality/manual', {
       city: 'Delhi-NCR',

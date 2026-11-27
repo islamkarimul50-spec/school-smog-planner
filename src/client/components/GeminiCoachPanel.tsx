@@ -97,7 +97,12 @@ export function GeminiCoachPanel({
         {airQuality.pm25UgM3.toFixed(1)} µg/m³) and latest plan diff.
       </p>
 
-      <div className="button-row" style={{ marginBottom: '0.75rem' }}>
+      <div
+        className="button-row"
+        role="group"
+        aria-label="Suggested coach questions"
+        style={{ marginBottom: '0.75rem' }}
+      >
         {quickQuestions.map((presetQ) => (
           <button
             key={presetQ}
@@ -136,7 +141,7 @@ export function GeminiCoachPanel({
       )}
 
       {error && (
-        <div className="alert alert--danger" role="alert">
+        <div id="coach-question-error" className="alert alert--danger" role="alert">
           {error}
         </div>
       )}
@@ -153,6 +158,8 @@ export function GeminiCoachPanel({
             value={question}
             placeholder="e.g., Why did my travel plan change?"
             onChange={(e) => setQuestion(e.target.value)}
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? 'coach-question-error' : undefined}
           />
         </div>
         <button

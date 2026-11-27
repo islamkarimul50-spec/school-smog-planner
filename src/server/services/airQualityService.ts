@@ -4,15 +4,12 @@ import {
   evaluateAirQualityStaleness
 } from '../../shared/airQualityUtils.js';
 import type { AirQualityReading } from '../../shared/types.js';
+import { BoundedTtlCache } from './boundedCache.js';
 
 const CACHE_TTL_MS = 15 * 60 * 1000;
 const GEOCODE_TTL_MS = 24 * 60 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 5000;
-
-interface CacheEntry<T> {
-  value: T;
-  expiresAtMs: number;
-}
+const MAX_CACHE_ENTRIES = 200;
 
 interface GeoResult {
   name: string;
@@ -43,8 +40,12 @@ export interface AirQualityFetchError {
 export type FetchLike = typeof fetch;
 
 export class AirQualityService {
-  private readonly airQualityCache = new Map<string, CacheEntry<AirQualityReading>>();
-  private readonly geocodeCache = new Map<string, CacheEntry<GeoResult>>();
+  private readonly airQualityCache = new BoundedTtlCache<AirQualityReading>(
+    MAX_CACHE_ENTRIES
+  );
+  private readonly geocodeCache = new BoundedTtlCache<GeoResult>(
+    MAX_CACHE_ENTRIES
+  );
   private readonly fetchImpl: FetchLike;
   private readonly nowFn: () => number;
 
@@ -70,17 +71,14 @@ export class AirQualityService {
     const cityKey = rawCity.trim().toLowerCase();
     const nowMs = this.nowFn();
 
-    const cached = this.airQualityCache.get(cityKey);
-    if (cached && cached.expiresAtMs > nowMs) {
-      const staleness = evaluateAirQualityStaleness(
-        cached.value.timestampIso,
-        nowMs
-      );
+    const cached = this.airQualityCache.get(cityKey, nowMs);
+    if (cached) {
+      const staleness = evaluateAirQualityStaleness(cached.timestampIso, nowMs);
       return {
         ok: true,
         cached: true,
         reading: {
-          ...cached.value,
+          ...cached,
           isStale: staleness.isStale,
           staleReason: staleness.staleReason
         }
@@ -89,20 +87,20 @@ export class AirQualityService {
 
     const searchName = this.normalizeCityQuery(rawCity);
 
-    let geo: GeoResult | null = null;
-    const cachedGeo = this.geocodeCache.get(searchName.toLowerCase());
-    if (cachedGeo && cachedGeo.expiresAtMs > nowMs) {
-      geo = cachedGeo.value;
-    } else {
+    let geo: GeoResult | null =
+      this.geocodeCache.get(searchName.toLowerCase(), nowMs) ?? null;
+    if (!geo) {
       const geoOutcome = await this.geocodeCity(searchName);
       if (!geoOutcome.ok) {
         return geoOutcome;
       }
       geo = geoOutcome.geo;
-      this.geocodeCache.set(searchName.toLowerCase(), {
-        value: geo,
-        expiresAtMs: nowMs + GEOCODE_TTL_MS
-      });
+      this.geocodeCache.set(
+        searchName.toLowerCase(),
+        geo,
+        GEOCODE_TTL_MS,
+        nowMs
+      );
     }
 
     const aqUrl = new URL('https://air-quality-api.open-meteo.com/v1/air-quality');
@@ -184,10 +182,7 @@ export class AirQualityService {
         }
       };
 
-      this.airQualityCache.set(cityKey, {
-        value: reading,
-        expiresAtMs: nowMs + CACHE_TTL_MS
-      });
+      this.airQualityCache.set(cityKey, reading, CACHE_TTL_MS, nowMs);
 
       return { ok: true, reading, cached: false };
     } catch {
