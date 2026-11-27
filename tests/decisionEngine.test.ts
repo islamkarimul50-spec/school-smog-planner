@@ -165,6 +165,30 @@ describe('decisionEngine — School Bus availability & acceptance scenarios', ()
     expect(plan.selectedModeId).toBe('walkOrCycle');
   });
 
+  it('blocks Walk / Cycle on live-typical Delhi-NCR PM2.5 (72.6 µg/m³, US AQI 210)', () => {
+    const liveTypicalAq = {
+      ...SEVERE_DELHI_AQ,
+      pm25UgM3: 72.6,
+      usAqi: 210,
+      category: 'Very Unhealthy' as const
+    };
+    const noFitInput: HouseholdInput = {
+      ...DEFAULT_HOUSEHOLD_INPUT,
+      commuteDurationMinutes: 10,
+      travelOptions: {
+        schoolBus: false,
+        metroOrPublicTransit: false,
+        carpool: false,
+        walkOrCycle: true,
+        privateCar: true
+      }
+    };
+
+    const plan = buildMorningPlan(noFitInput, liveTypicalAq);
+    expect(plan.routineStatus).toBe('NO_FEASIBLE_OPTION');
+    expect(plan.conflictExplanation).toContain('72.6 µg/m³');
+  });
+
   it('tailors indoor air quality recommendation to HEPA ownership vs zero remaining budget', () => {
     const hepaPlan = buildMorningPlan(
       { ...DEFAULT_HOUSEHOLD_INPUT, homePurifier: 'hepa_purifier' },

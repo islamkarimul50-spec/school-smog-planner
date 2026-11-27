@@ -8,6 +8,8 @@ import {
   SOLO_CAR_EMISSION_KG_PER_KM,
   TRAVEL_MODE_ORDER,
   TRAVEL_MODE_SPECS,
+  US_AQI_ACTIVE_COMMUTE_CAP,
+  US_AQI_SENSITIVE_ACTIVE_CAP,
   convertCurrencyToInr,
   formatCurrencyFromInr
 } from './constants.js';
@@ -43,7 +45,8 @@ function checkTravelConstraints(
   modeId: TravelModeId,
   input: HouseholdInput,
   availableWindowMinutes: number,
-  pm25UgM3: number
+  pm25UgM3: number,
+  usAqi?: number
 ): TravelOptionEvaluation {
   const spec = TRAVEL_MODE_SPECS[modeId];
   const available = input.travelOptions[modeId];
@@ -90,9 +93,15 @@ function checkTravelConstraints(
     const effectiveCap = input.childHasAsthmaOrSensitivity
       ? PM25_SENSITIVE_ACTIVE_CAP_UG_M3
       : spec.maxSafePm25UgM3;
-    if (pm25UgM3 > effectiveCap) {
+    const effectiveAqiCap = input.childHasAsthmaOrSensitivity
+      ? US_AQI_SENSITIVE_ACTIVE_CAP
+      : US_AQI_ACTIVE_COMMUTE_CAP;
+    const exceedsPm25 = pm25UgM3 > effectiveCap;
+    const exceedsAqi = typeof usAqi === 'number' && usAqi > effectiveAqiCap;
+
+    if (exceedsPm25 || exceedsAqi) {
       rejectionReasons.push(
-        `Outdoor PM2.5 (${pm25UgM3.toFixed(1)} µg/m³) exceeds the child active-commute safety cap (${effectiveCap.toFixed(1)} µg/m³).`
+        `Outdoor air (PM2.5 ${pm25UgM3.toFixed(1)} µg/m³${typeof usAqi === 'number' ? `, US AQI ${usAqi}` : ''}) exceeds the child active-commute safety cap (${effectiveCap.toFixed(1)} µg/m³ / US AQI ${effectiveAqiCap}).`
       );
     }
   }
@@ -141,25 +150,34 @@ function checkTravelConstraints(
 export function evaluateBusAvailability(
   input: HouseholdInput,
   availableWindowMinutes: number,
-  pm25UgM3: number
+  pm25UgM3: number,
+  usAqi?: number
 ): TravelOptionEvaluation {
   return checkTravelConstraints(
     'schoolBus',
     input,
     availableWindowMinutes,
-    pm25UgM3
+    pm25UgM3,
+    usAqi
   );
 }
 
 export function evaluateAllTravelOptions(
   input: HouseholdInput,
   availableWindowMinutes: number,
-  pm25UgM3: number
+  pm25UgM3: number,
+  usAqi?: number
 ): TravelOptionEvaluation[] {
   return TRAVEL_MODE_ORDER.map((modeId) =>
     modeId === 'schoolBus'
-      ? evaluateBusAvailability(input, availableWindowMinutes, pm25UgM3)
-      : checkTravelConstraints(modeId, input, availableWindowMinutes, pm25UgM3)
+      ? evaluateBusAvailability(input, availableWindowMinutes, pm25UgM3, usAqi)
+      : checkTravelConstraints(
+          modeId,
+          input,
+          availableWindowMinutes,
+          pm25UgM3,
+          usAqi
+        )
   );
 }
 
@@ -188,7 +206,7 @@ function selectBestTravelOption(
     return null;
   }
 
-  const isPollutedMorning = pm25UgM3 > PM25_ACTIVE_COMMUTE_CAP_UG_M3 - 34.6; // > 55.4 µg/m³
+  const isPollutedMorning = pm25UgM3 > PM25_ACTIVE_COMMUTE_CAP_UG_M3;
   feasible.sort((a, b) => {
     const specA = TRAVEL_MODE_SPECS[a.modeId];
     const specB = TRAVEL_MODE_SPECS[b.modeId];
@@ -616,7 +634,8 @@ export function buildMorningPlan(
   const evaluations = evaluateAllTravelOptions(
     input,
     availableWindowMinutes,
-    airQuality.pm25UgM3
+    airQuality.pm25UgM3,
+    airQuality.usAqi
   );
   const selected = selectBestTravelOption(evaluations, airQuality.pm25UgM3);
 

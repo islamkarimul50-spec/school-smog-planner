@@ -20,10 +20,12 @@ export const SOLO_CAR_EMISSION_KG_PER_KM = 0.18;
 /** Air-quality observation older than 3 hours is marked stale. */
 export const AIR_QUALITY_STALE_THRESHOLD_MS = 3 * 60 * 60 * 1000;
 
-/** PM2.5 thresholds (µg/m³) governing outdoor active travel & mask guidance. */
+/** PM2.5 & US AQI thresholds (aligned with May 2024 US EPA breakpoints) governing active travel & masks. */
 export const PM25_MASK_RECOMMENDED_UG_M3 = 35.5; // US AQI > 100 (USG+)
-export const PM25_ACTIVE_COMMUTE_CAP_UG_M3 = 90.0; // Unhealthy outdoor child exertion threshold
-export const PM25_SENSITIVE_ACTIVE_CAP_UG_M3 = 55.4; // Stricter cap when child has asthma/sensitivity
+export const PM25_ACTIVE_COMMUTE_CAP_UG_M3 = 55.4; // Above this (>150 US AQI) is Unhealthy for all
+export const PM25_SENSITIVE_ACTIVE_CAP_UG_M3 = 35.4; // Stricter cap (>100 US AQI) for sensitive children
+export const US_AQI_ACTIVE_COMMUTE_CAP = 150;
+export const US_AQI_SENSITIVE_ACTIVE_CAP = 100;
 export const ACTIVE_COMMUTE_MAX_MINUTES = 25;
 
 export interface TravelModeSpec {
@@ -188,8 +190,8 @@ export const SAMPLE_AIR_QUALITY_PRESETS: Record<string, AirQualityReading> = {
     resolvedLocation: 'Sample: Delhi-NCR Winter Inversion Scenario',
     pm25UgM3: 245,
     pm10UgM3: 365,
-    usAqi: 295,
-    category: 'Very Unhealthy',
+    usAqi: 315,
+    category: 'Hazardous',
     source: 'Sample Dataset · Severe Winter Smog Baseline',
     dataOrigin: 'sample',
     timestampIso: '2026-11-27T07:00:00.000Z',

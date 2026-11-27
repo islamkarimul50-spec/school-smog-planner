@@ -82,7 +82,10 @@ npm run dev
 npm run typecheck
 npm test
 npm run build
+# macOS / Linux:
 NODE_ENV=production npm start
+# Windows PowerShell:
+# $env:NODE_ENV="production"; npm start
 ```
 Then open `http://localhost:3000` (or the configured `PORT`).
 
@@ -108,7 +111,7 @@ All baseline constants live in [`src/shared/constants.ts`](src/shared/constants.
   - `3-Family School Carpool`: `₹85/day`, `duration × 1.15 + 5 min`, `0.06 kg CO2e/student-km`
   - `Walk / Cycle`: `₹0/day`, `duration × 1.8 + 2 min`, `0 kg CO2e/student-km`
   - `Private Car / Solo Cab`: `₹220/day`, `duration × 1.0 + 3 min`, `0.18 kg CO2e/student-km`
-- **Active-commute safety limits:** `Walk / Cycle` is blocked above `90.0 µg/m³` PM2.5 (`55.4 µg/m³` when respiratory sensitivity is checked) or above `25 min` door-to-door along urban roads.
+- **Active-commute safety limits:** `Walk / Cycle` is blocked above `55.4 µg/m³` PM2.5 or `US AQI 150` (`35.4 µg/m³` / `US AQI 100` when respiratory sensitivity is checked), or above `25 min` door-to-door along urban roads.
 - **IAQ daily amortized cost estimates:** Zero-cost draft sealing (`₹0/day`), DIY box-fan MERV-13 filter upkeep (`₹35/day` over ~90 winter days), Portable HEPA operation (`₹30/day` + `~0.03 kg CO2e` for 1-hour pre-school morning run at `35W`).
 - **Currency conversion (when USD selected):** `1 USD = 84 INR`.
 

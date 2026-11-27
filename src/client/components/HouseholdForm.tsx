@@ -306,8 +306,8 @@ export function HouseholdForm({
               }
             />
             <span>
-              Child has asthma or respiratory sensitivity (stricter 55.4 µg/m³
-              active-commute limit)
+              Child has asthma or respiratory sensitivity (stricter 35.4 µg/m³ /
+              US AQI 100 active-commute limit)
             </span>
           </label>
         </fieldset>
