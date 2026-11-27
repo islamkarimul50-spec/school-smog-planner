@@ -82,7 +82,7 @@ export const AirQualityReadingSchema = z.object({
   resolvedLocation: z.string().trim().min(2).max(120),
   pm25UgM3: z.number().min(0).max(1500),
   pm10UgM3: z.number().min(0).max(2000).nullable(),
-  usAqi: z.number().min(0).max(500),
+  usAqi: z.number().min(0).max(3500),
   category: z.enum([
     'Good',
     'Moderate',
@@ -99,7 +99,7 @@ export const AirQualityReadingSchema = z.object({
   units: z.object({
     pm25: z.literal('µg/m³'),
     pm10: z.literal('µg/m³'),
-    usAqi: z.literal('US AQI (0-500)')
+    usAqi: z.literal('US AQI (0-500+)')
   })
 });
 

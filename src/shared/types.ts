@@ -40,7 +40,7 @@ export interface AirQualityReading {
   units: {
     pm25: 'µg/m³';
     pm10: 'µg/m³';
-    usAqi: 'US AQI (0-500)';
+    usAqi: 'US AQI (0-500+)';
   };
 }
 

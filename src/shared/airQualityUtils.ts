@@ -10,7 +10,7 @@ interface Breakpoint {
 }
 
 /**
- * Revised US EPA PM2.5 24-hour AQI breakpoints (effective May 6, 2024).
+ * Revised US EPA PM2.5 24-hour AQI breakpoints (effective May 6, 2024; EPA-454/B-24-002).
  */
 const PM25_BREAKPOINTS: Breakpoint[] = [
   { cLow: 0.0, cHigh: 9.0, iLow: 0, iHigh: 50, category: 'Good' },
@@ -30,18 +30,29 @@ const PM25_BREAKPOINTS: Breakpoint[] = [
     iHigh: 300,
     category: 'Very Unhealthy'
   },
-  { cLow: 225.5, cHigh: 500.4, iLow: 301, iHigh: 500, category: 'Hazardous' }
+  { cLow: 225.5, cHigh: 325.4, iLow: 301, iHigh: 500, category: 'Hazardous' }
 ];
 
+const HAZARDOUS_TOP_BREAKPOINT = PM25_BREAKPOINTS[PM25_BREAKPOINTS.length - 1]!;
+
+function interpolateBreakpoint(truncatedPm25: number, bp: Breakpoint): number {
+  const ratio = (bp.iHigh - bp.iLow) / (bp.cHigh - bp.cLow);
+  return Math.round(ratio * (truncatedPm25 - bp.cLow) + bp.iLow);
+}
+
+/**
+ * Computes US EPA PM2.5 AQI using May 2024 breakpoints (truncating PM2.5 to 1 decimal place).
+ * Values above 325.4 µg/m³ ("Beyond the AQI", AQI > 500) continue linearly using the
+ * Hazardous (225.5–325.4 µg/m³ -> 301–500) slope per AirNow / EPA TAD guidance.
+ */
 export function computeUsAqiFromPm25(pm25UgM3: number): number {
-  const truncated = Math.floor(Math.max(0, pm25UgM3) * 10) / 10;
+  const truncated = Math.floor((Math.max(0, pm25UgM3) + 1e-9) * 10) / 10;
   for (const bp of PM25_BREAKPOINTS) {
     if (truncated <= bp.cHigh) {
-      const ratio = (bp.iHigh - bp.iLow) / (bp.cHigh - bp.cLow);
-      return Math.round(ratio * (truncated - bp.cLow) + bp.iLow);
+      return interpolateBreakpoint(truncated, bp);
     }
   }
-  return 500;
+  return interpolateBreakpoint(truncated, HAZARDOUS_TOP_BREAKPOINT);
 }
 
 export function classifyUsAqi(usAqi: number): AirQualityCategory {
@@ -61,7 +72,8 @@ export function evaluateAirQualityStaleness(
   if (Number.isNaN(parsedMs)) {
     return {
       isStale: true,
-      staleReason: 'Observation timestamp could not be parsed; verify with local monitor or enter a manual reading.'
+      staleReason:
+        'Observation timestamp could not be parsed; verify with local monitor or enter a manual reading.'
     };
   }
   const ageMs = nowMs - parsedMs;

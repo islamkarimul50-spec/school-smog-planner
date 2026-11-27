@@ -151,7 +151,7 @@ export class AirQualityService {
           : null;
       const usAqi =
         typeof current.us_aqi === 'number' && !Number.isNaN(current.us_aqi)
-          ? Math.min(500, Math.max(0, Math.round(current.us_aqi)))
+          ? Math.max(0, Math.round(current.us_aqi))
           : computeUsAqiFromPm25(pm25UgM3);
 
       const rawTime = current.time ?? new Date(nowMs).toISOString();
@@ -180,7 +180,7 @@ export class AirQualityService {
         units: {
           pm25: 'µg/m³',
           pm10: 'µg/m³',
-          usAqi: 'US AQI (0-500)'
+          usAqi: 'US AQI (0-500+)'
         }
       };
 

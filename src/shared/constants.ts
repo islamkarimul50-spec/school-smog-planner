@@ -190,14 +190,14 @@ export const SAMPLE_AIR_QUALITY_PRESETS: Record<string, AirQualityReading> = {
     resolvedLocation: 'Sample: Delhi-NCR Winter Inversion Scenario',
     pm25UgM3: 245,
     pm10UgM3: 365,
-    usAqi: 315,
+    usAqi: 340,
     category: 'Hazardous',
     source: 'Sample Dataset · Severe Winter Smog Baseline',
     dataOrigin: 'sample',
     timestampIso: '2026-11-27T07:00:00.000Z',
     isStale: false,
     staleReason: null,
-    units: { pm25: 'µg/m³', pm10: 'µg/m³', usAqi: 'US AQI (0-500)' }
+    units: { pm25: 'µg/m³', pm10: 'µg/m³', usAqi: 'US AQI (0-500+)' }
   },
   moderate_urban: {
     cityQuery: 'Bengaluru',
@@ -211,7 +211,7 @@ export const SAMPLE_AIR_QUALITY_PRESETS: Record<string, AirQualityReading> = {
     timestampIso: '2026-11-27T07:00:00.000Z',
     isStale: false,
     staleReason: null,
-    units: { pm25: 'µg/m³', pm10: 'µg/m³', usAqi: 'US AQI (0-500)' }
+    units: { pm25: 'µg/m³', pm10: 'µg/m³', usAqi: 'US AQI (0-500+)' }
   },
   clean_morning: {
     cityQuery: 'Shimla',
@@ -225,7 +225,7 @@ export const SAMPLE_AIR_QUALITY_PRESETS: Record<string, AirQualityReading> = {
     timestampIso: '2026-11-27T07:00:00.000Z',
     isStale: false,
     staleReason: null,
-    units: { pm25: 'µg/m³', pm10: 'µg/m³', usAqi: 'US AQI (0-500)' }
+    units: { pm25: 'µg/m³', pm10: 'µg/m³', usAqi: 'US AQI (0-500+)' }
   }
 };
 

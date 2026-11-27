@@ -75,7 +75,9 @@ export function AirQualityBanner({
         </h2>
         {airQuality && (
           <span className={getSeverityBadgeClass(airQuality.category)}>
-            {airQuality.category.toUpperCase()} · US AQI {airQuality.usAqi}
+            {airQuality.category.toUpperCase()}
+            {airQuality.usAqi > 500 ? ' (BEYOND THE AQI)' : ''} · US AQI{' '}
+            {airQuality.usAqi}
           </span>
         )}
       </div>

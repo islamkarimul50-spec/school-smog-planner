@@ -212,10 +212,33 @@ describe('decisionEngine — School Bus availability & acceptance scenarios', ()
 });
 
 describe('airQualityUtils — 2024 EPA breakpoints & staleness', () => {
-  it('computes revised 2024 EPA US AQI categories accurately', () => {
-    expect(computeUsAqiFromPm25(8.5)).toBeLessThanOrEqual(50);
+  it('computes revised 2024 EPA US AQI breakpoints across Good through Hazardous', () => {
+    expect(computeUsAqiFromPm25(0)).toBe(0);
+    expect(computeUsAqiFromPm25(8.5)).toBe(47);
     expect(classifyUsAqi(47)).toBe('Good');
+    expect(computeUsAqiFromPm25(9.0)).toBe(50);
+    expect(computeUsAqiFromPm25(9.1)).toBe(51);
+    expect(computeUsAqiFromPm25(35.4)).toBe(100);
+    expect(computeUsAqiFromPm25(35.5)).toBe(101);
+    expect(computeUsAqiFromPm25(55.4)).toBe(150);
+    expect(computeUsAqiFromPm25(55.5)).toBe(151);
+    expect(computeUsAqiFromPm25(125.4)).toBe(200);
+    expect(computeUsAqiFromPm25(125.5)).toBe(201);
+    expect(computeUsAqiFromPm25(225.4)).toBe(300);
+    expect(computeUsAqiFromPm25(245)).toBe(340);
     expect(classifyUsAqi(computeUsAqiFromPm25(245))).toBe('Hazardous');
+  });
+
+  it('maps exact Hazardous endpoints 225.5 µg/m³ -> AQI 301 and 325.4 µg/m³ -> AQI 500', () => {
+    expect(computeUsAqiFromPm25(225.5)).toBe(301);
+    expect(computeUsAqiFromPm25(325.4)).toBe(500);
+    expect(computeUsAqiFromPm25(325.49)).toBe(500); // EPA truncates PM2.5 to 1 decimal place
+  });
+
+  it('extrapolates linearly beyond AQI 500 above 325.4 µg/m³ using Hazardous slope', () => {
+    expect(computeUsAqiFromPm25(326.0)).toBe(501);
+    expect(computeUsAqiFromPm25(375.5)).toBe(600);
+    expect(classifyUsAqi(600)).toBe('Hazardous');
   });
 
   it('marks readings older than 3 hours as stale', () => {

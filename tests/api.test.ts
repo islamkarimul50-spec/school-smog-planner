@@ -340,6 +340,21 @@ describe('Express API integration (offline, repeatable without live API keys)', 
     expect(manualAqRes.body.airQuality.pm25UgM3).toBe(185);
     expect(manualAqRes.body.airQuality.usAqi).toBeGreaterThanOrEqual(200);
 
+    // Beyond-the-AQI manual reading (>325.4 µg/m³) accepted by /api/plan
+    const extremeManualRes = await invokeApp(
+      app,
+      'POST',
+      '/api/air-quality/manual',
+      { city: 'Delhi-NCR', pm25UgM3: 375.5 }
+    );
+    expect(extremeManualRes.status).toBe(200);
+    expect(extremeManualRes.body.airQuality.usAqi).toBe(600);
+    const extremePlanRes = await invokeApp(app, 'POST', '/api/plan', {
+      householdInput: DEFAULT_HOUSEHOLD_INPUT,
+      airQuality: extremeManualRes.body.airQuality
+    });
+    expect(extremePlanRes.status).toBe(200);
+
     const { app: strictRateApp } = createApp({
       airQualityService: createMockAqService(false),
       geminiService: new GeminiCoachService({ apiKey: '' }),
