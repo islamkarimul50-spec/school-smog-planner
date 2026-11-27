@@ -114,6 +114,7 @@ export interface MorningPlan {
   selectedModeLabel: string | null;
   recommendedDepartureTime: string | null;
   availableWindowMinutes: number;
+  baselineCommuteDurationMinutes: number;
   dailyBudgetInr: number;
   allocatedTravelCostInr: number;
   remainingBudgetInr: number;

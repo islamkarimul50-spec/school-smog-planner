@@ -156,7 +156,8 @@ export function PlanCards({ plan, aiExplanation, currency }: PlanCardsProps) {
           Deterministic Constraint Check Across All Travel Modes
         </h2>
         <p className="aq-meta">
-          Available morning window: <strong>{plan.availableWindowMinutes} min</strong> · Daily
+          Available morning window: <strong>{plan.availableWindowMinutes} min</strong> · Baseline
+          commute: <strong>{plan.baselineCommuteDurationMinutes} min</strong> · Daily
           budget: <strong>{formatCurrencyFromInr(plan.dailyBudgetInr, currency)}</strong> ·
           Active PM2.5:{' '}
           <strong>{plan.airQualitySnapshot.pm25UgM3.toFixed(1)} µg/m³</strong>

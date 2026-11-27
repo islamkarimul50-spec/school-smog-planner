@@ -615,14 +615,22 @@ function buildSustainableAlternativeRecommendation(
   };
 }
 
+export function computeAvailableWindowMinutes(
+  earliestReadyTime: string,
+  schoolStartTime: string
+): number {
+  return parseTimeToMinutes(schoolStartTime) - parseTimeToMinutes(earliestReadyTime);
+}
+
 export function buildMorningPlan(
   input: HouseholdInput,
   airQuality: AirQualityReading,
   nowIso: string = new Date().toISOString()
 ): MorningPlan {
-  const startMins = parseTimeToMinutes(input.schoolStartTime);
-  const readyMins = parseTimeToMinutes(input.earliestReadyTime);
-  const availableWindowMinutes = startMins - readyMins;
+  const availableWindowMinutes = computeAvailableWindowMinutes(
+    input.earliestReadyTime,
+    input.schoolStartTime
+  );
 
   const estimatedOneWayDistanceKm =
     (input.commuteDurationMinutes / 60) * ASSUMED_MOTORIZED_SPEED_KM_PER_HOUR;
@@ -670,6 +678,7 @@ export function buildMorningPlan(
     selectedModeLabel: selected ? selected.label : null,
     recommendedDepartureTime: selected ? selected.recommendedDepartureTime : null,
     availableWindowMinutes,
+    baselineCommuteDurationMinutes: input.commuteDurationMinutes,
     dailyBudgetInr,
     allocatedTravelCostInr,
     remainingBudgetInr,

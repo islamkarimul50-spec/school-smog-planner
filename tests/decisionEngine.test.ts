@@ -10,6 +10,7 @@ import {
 } from '../src/shared/constants.js';
 import {
   buildMorningPlan,
+  computeAvailableWindowMinutes,
   computePlanDiff,
   evaluateBusAvailability
 } from '../src/shared/decisionEngine.js';
@@ -19,6 +20,27 @@ const SEVERE_DELHI_AQ = SAMPLE_AIR_QUALITY_PRESETS.delhi_severe_winter!;
 const CLEAN_AQ = SAMPLE_AIR_QUALITY_PRESETS.clean_morning!;
 
 describe('decisionEngine — School Bus availability & acceptance scenarios', () => {
+  it('computes availableWindowMinutes and baselineCommuteDurationMinutes dynamically from household times', () => {
+    expect(computeAvailableWindowMinutes('07:00', '08:00')).toBe(60);
+    expect(computeAvailableWindowMinutes('07:20', '08:00')).toBe(40);
+
+    const defaultPlan = buildMorningPlan(DEFAULT_HOUSEHOLD_INPUT, SEVERE_DELHI_AQ);
+    expect(defaultPlan.availableWindowMinutes).toBe(60);
+    expect(defaultPlan.baselineCommuteDurationMinutes).toBe(25);
+
+    const shiftedPlan = buildMorningPlan(
+      {
+        ...DEFAULT_HOUSEHOLD_INPUT,
+        earliestReadyTime: '07:15',
+        schoolStartTime: '08:10',
+        commuteDurationMinutes: 30
+      },
+      SEVERE_DELHI_AQ
+    );
+    expect(shiftedPlan.availableWindowMinutes).toBe(55);
+    expect(shiftedPlan.baselineCommuteDurationMinutes).toBe(30);
+  });
+
   it('evaluateBusAvailability accepts Shared School Bus when available, affordable, and on time', () => {
     const busEval = evaluateBusAvailability(
       DEFAULT_HOUSEHOLD_INPUT,

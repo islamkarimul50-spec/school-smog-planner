@@ -91,6 +91,9 @@ export async function askCoachFollowUp(params: {
   planDiff: PlanDiff | null;
   history: ChatMessage[];
 }): Promise<ChatResponsePayload> {
+  const selectedEval = params.plan.evaluatedTravelOptions.find(
+    (item) => item.modeId === params.plan.selectedModeId
+  );
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -102,6 +105,10 @@ export async function askCoachFollowUp(params: {
         routineStatus: params.plan.routineStatus,
         selectedModeLabel: params.plan.selectedModeLabel,
         recommendedDepartureTime: params.plan.recommendedDepartureTime,
+        availableWindowMinutes: params.plan.availableWindowMinutes,
+        baselineCommuteDurationMinutes:
+          params.plan.baselineCommuteDurationMinutes,
+        selectedModeDurationMinutes: selectedEval?.requiredMinutes ?? null,
         allocatedTravelCostInr: params.plan.allocatedTravelCostInr,
         remainingBudgetInr: params.plan.remainingBudgetInr,
         conflictExplanation: params.plan.conflictExplanation,
