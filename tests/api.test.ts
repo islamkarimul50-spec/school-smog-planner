@@ -326,10 +326,9 @@ describe('Express API integration (offline, repeatable without live API keys)', 
     );
     expect(oversizedRes.status).toBe(413);
 
+    const syntheticKeyPattern = ['AIza', 'SyD1234567890ABCDEFGHIJKLMNOP'].join('');
     expect(
-      sanitizeErrorMessage(
-        new Error('Failed using AIzaSyD1234567890ABCDEFGHIJKLMNOP')
-      )
+      sanitizeErrorMessage(new Error(`Failed using ${syntheticKeyPattern}`))
     ).toBe('Failed using [REDACTED_KEY]');
 
     const manualAqRes = await invokeApp(app, 'POST', '/api/air-quality/manual', {
