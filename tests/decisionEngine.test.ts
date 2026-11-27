@@ -211,6 +211,98 @@ describe('decisionEngine — School Bus availability & acceptance scenarios', ()
     expect(plan.conflictExplanation).toContain('72.6 µg/m³');
   });
 
+  it('does not suggest leaving earlier when walking fails BOTH timing and pollution constraints', () => {
+    const multiFailureInput: HouseholdInput = {
+      ...DEFAULT_HOUSEHOLD_INPUT,
+      earliestReadyTime: '07:45',
+      schoolStartTime: '08:00', // 15-minute window
+      commuteDurationMinutes: 10, // Walk / Cycle takes 20 min (> 15 min) AND fails 245 µg/m³ smog cap
+      travelOptions: {
+        schoolBus: false,
+        metroOrPublicTransit: false,
+        carpool: false,
+        walkOrCycle: true,
+        privateCar: false
+      }
+    };
+
+    const plan = buildMorningPlan(multiFailureInput, SEVERE_DELHI_AQ);
+    const walkEval = plan.evaluatedTravelOptions.find(
+      (e) => e.modeId === 'walkOrCycle'
+    )!;
+
+    expect(plan.routineStatus).toBe('NO_FEASIBLE_OPTION');
+    expect(walkEval.constraints.timing).toBe(false);
+    expect(walkEval.constraints.airQualitySafety).toBe(false);
+    expect(
+      plan.constraintChangePrompts.some((p) =>
+        p.constraint.includes('Morning timing window')
+      )
+    ).toBe(false);
+    expect(
+      plan.constraintChangePrompts.some((p) =>
+        p.suggestion.includes('Walk / Cycle')
+      )
+    ).toBe(false);
+  });
+
+  it('suggests leaving earlier when a route fails ONLY the timing window', () => {
+    const busTimingOnlyInput: HouseholdInput = {
+      ...DEFAULT_HOUSEHOLD_INPUT,
+      earliestReadyTime: '07:35',
+      schoolStartTime: '08:00', // 25-minute window
+      commuteDurationMinutes: 25, // School Bus takes 34 min (> 25 min), passes budget & smog
+      travelOptions: {
+        schoolBus: true,
+        metroOrPublicTransit: false,
+        carpool: false,
+        walkOrCycle: false,
+        privateCar: false
+      }
+    };
+
+    const busPlan = buildMorningPlan(busTimingOnlyInput, SEVERE_DELHI_AQ);
+    const busEval = busPlan.evaluatedTravelOptions.find(
+      (e) => e.modeId === 'schoolBus'
+    )!;
+    expect(busEval.constraints.availability).toBe(true);
+    expect(busEval.constraints.budget).toBe(true);
+    expect(busEval.constraints.timing).toBe(false);
+    expect(busEval.constraints.airQualitySafety).toBe(true);
+    expect(
+      busPlan.constraintChangePrompts.some(
+        (p) =>
+          p.constraint === 'Morning timing window' &&
+          p.suggestion.includes('Leave 9 min earlier (by 07:26)')
+      )
+    ).toBe(true);
+
+    // Clean-air walking failing ONLY timing window also preserves the timing suggestion
+    const cleanWalkTimingOnlyInput: HouseholdInput = {
+      ...DEFAULT_HOUSEHOLD_INPUT,
+      city: 'Shimla',
+      earliestReadyTime: '07:45',
+      schoolStartTime: '08:00',
+      commuteDurationMinutes: 10, // Walk / Cycle takes 20 min (<= 25 min active cap)
+      travelOptions: {
+        schoolBus: false,
+        metroOrPublicTransit: false,
+        carpool: false,
+        walkOrCycle: true,
+        privateCar: false
+      }
+    };
+
+    const cleanWalkPlan = buildMorningPlan(cleanWalkTimingOnlyInput, CLEAN_AQ);
+    expect(
+      cleanWalkPlan.constraintChangePrompts.some(
+        (p) =>
+          p.constraint === 'Morning timing window' &&
+          p.suggestion.includes('Leave 5 min earlier (by 07:40)')
+      )
+    ).toBe(true);
+  });
+
   it('tailors indoor air quality recommendation to HEPA ownership vs zero remaining budget', () => {
     const hepaPlan = buildMorningPlan(
       { ...DEFAULT_HOUSEHOLD_INPUT, homePurifier: 'hepa_purifier' },

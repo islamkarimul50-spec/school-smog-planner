@@ -7,7 +7,8 @@ import {
 } from '../src/server/services/geminiService.js';
 import {
   DEFAULT_HOUSEHOLD_INPUT,
-  SAMPLE_AIR_QUALITY_PRESETS
+  SAMPLE_AIR_QUALITY_PRESETS,
+  formatCurrencyFromInr
 } from '../src/shared/constants.js';
 import { buildMorningPlan } from '../src/shared/decisionEngine.js';
 import type { HouseholdInput } from '../src/shared/types.js';
@@ -253,5 +254,63 @@ describe('GeminiCoachService diagnostics & timing consistency', () => {
     expect(fallbackChanged.answer).toContain('30 minutes');
     expect(fallbackChanged.answer).toContain('40 minutes door-to-door');
     expect(fallbackChanged.answer).not.toContain('60 minutes');
+  });
+
+  it('agrees with decisionEngine budget formatting for both INR and USD using shared currency conversion', async () => {
+    const fallbackCoach = new GeminiCoachService({ apiKey: '' });
+
+    for (const caseCfg of [
+      { dailyBudget: 150, budgetCurrency: 'INR' as const },
+      { dailyBudget: 2, budgetCurrency: 'USD' as const },
+      { dailyBudget: 1.79, budgetCurrency: 'USD' as const }
+    ]) {
+      const input: HouseholdInput = {
+        ...DEFAULT_HOUSEHOLD_INPUT,
+        dailyBudget: caseCfg.dailyBudget,
+        budgetCurrency: caseCfg.budgetCurrency
+      };
+      const plan = buildMorningPlan(input, DEL_AQ);
+      const expectedBudgetText = formatCurrencyFromInr(
+        plan.dailyBudgetInr,
+        input.budgetCurrency
+      );
+
+      const planFallback = await fallbackCoach.explainMorningPlan(
+        input,
+        plan,
+        null
+      );
+      expect(planFallback.text).toContain(expectedBudgetText);
+
+      const busEval = plan.evaluatedTravelOptions.find(
+        (e) => e.modeId === 'schoolBus'
+      )!;
+      const chatFallback = await fallbackCoach.answerFollowUp({
+        question: 'What is our budget and commute plan?',
+        householdInput: input,
+        airQuality: DEL_AQ,
+        planSummary: {
+          routineStatus: plan.routineStatus,
+          selectedModeLabel: plan.selectedModeLabel,
+          recommendedDepartureTime: plan.recommendedDepartureTime,
+          availableWindowMinutes: plan.availableWindowMinutes,
+          baselineCommuteDurationMinutes: plan.baselineCommuteDurationMinutes,
+          selectedModeDurationMinutes: busEval.requiredMinutes,
+          allocatedTravelCostInr: plan.allocatedTravelCostInr,
+          remainingBudgetInr: plan.remainingBudgetInr,
+          conflictExplanation: plan.conflictExplanation,
+          constraintChangePrompts: plan.constraintChangePrompts,
+          routineWhat: plan.recommendations.routine.whatToDo,
+          indoorWhat: plan.recommendations.indoorAirQuality.whatToDo,
+          sustainableWhat:
+            plan.recommendations.sustainableAlternative.whatToDo,
+          rejectedModes: []
+        },
+        planDiff: null,
+        history: []
+      });
+
+      expect(chatFallback.answer).toContain(expectedBudgetText);
+    }
   });
 });

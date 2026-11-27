@@ -22,6 +22,7 @@ import type {
   MorningPlan,
   PlanDiff,
   RecommendationBlock,
+  TravelConstraintChecks,
   TravelModeId,
   TravelOptionEvaluation
 } from './types.js';
@@ -68,54 +69,64 @@ function checkTravelConstraints(
     Math.max(0, soloCarEmissions - emissionsKgCo2ePerRoundTrip).toFixed(2)
   );
 
+  const activePm25Cap =
+    spec.maxSafePm25UgM3 === null
+      ? null
+      : input.childHasAsthmaOrSensitivity
+        ? PM25_SENSITIVE_ACTIVE_CAP_UG_M3
+        : spec.maxSafePm25UgM3;
+  const activeAqiCap = input.childHasAsthmaOrSensitivity
+    ? US_AQI_SENSITIVE_ACTIVE_CAP
+    : US_AQI_ACTIVE_COMMUTE_CAP;
+
+  const exceedsPm25 = activePm25Cap !== null && pm25UgM3 > activePm25Cap;
+  const exceedsAqi =
+    activePm25Cap !== null && typeof usAqi === 'number' && usAqi > activeAqiCap;
+
+  const constraints: TravelConstraintChecks = {
+    availability: available,
+    budget: spec.costInr <= dailyBudgetInr,
+    timing: requiredMinutes <= availableWindowMinutes,
+    airQualitySafety: !exceedsPm25 && !exceedsAqi,
+    activeDuration:
+      spec.maxSafeDurationMinutes === null ||
+      requiredMinutes <= spec.maxSafeDurationMinutes
+  };
+
   const rejectionReasons: string[] = [];
 
-  if (!available) {
+  if (!constraints.availability) {
     rejectionReasons.push(
       `${spec.label} is marked unavailable ("No") in household travel options.`
     );
   }
 
-  if (spec.costInr > dailyBudgetInr) {
+  if (!constraints.budget) {
     const gapInr = spec.costInr - dailyBudgetInr;
     rejectionReasons.push(
       `Cost ${formatCurrencyFromInr(spec.costInr, input.budgetCurrency)} exceeds daily budget ${formatCurrencyFromInr(dailyBudgetInr, input.budgetCurrency)} by ${formatCurrencyFromInr(gapInr, input.budgetCurrency)}.`
     );
   }
 
-  if (requiredMinutes > availableWindowMinutes) {
+  if (!constraints.timing) {
     rejectionReasons.push(
       `Needs ${requiredMinutes} min door-to-door, which exceeds the ${availableWindowMinutes} min window between ${input.earliestReadyTime} ready time and ${input.schoolStartTime} start.`
     );
   }
 
-  if (spec.maxSafePm25UgM3 !== null) {
-    const effectiveCap = input.childHasAsthmaOrSensitivity
-      ? PM25_SENSITIVE_ACTIVE_CAP_UG_M3
-      : spec.maxSafePm25UgM3;
-    const effectiveAqiCap = input.childHasAsthmaOrSensitivity
-      ? US_AQI_SENSITIVE_ACTIVE_CAP
-      : US_AQI_ACTIVE_COMMUTE_CAP;
-    const exceedsPm25 = pm25UgM3 > effectiveCap;
-    const exceedsAqi = typeof usAqi === 'number' && usAqi > effectiveAqiCap;
-
-    if (exceedsPm25 || exceedsAqi) {
-      rejectionReasons.push(
-        `Outdoor air (PM2.5 ${pm25UgM3.toFixed(1)} µg/m³${typeof usAqi === 'number' ? `, US AQI ${usAqi}` : ''}) exceeds the child active-commute safety cap (${effectiveCap.toFixed(1)} µg/m³ / US AQI ${effectiveAqiCap}).`
-      );
-    }
+  if (!constraints.airQualitySafety && activePm25Cap !== null) {
+    rejectionReasons.push(
+      `Outdoor air (PM2.5 ${pm25UgM3.toFixed(1)} µg/m³${typeof usAqi === 'number' ? `, US AQI ${usAqi}` : ''}) exceeds the child active-commute safety cap (${activePm25Cap.toFixed(1)} µg/m³ / US AQI ${activeAqiCap}).`
+    );
   }
 
-  if (
-    spec.maxSafeDurationMinutes !== null &&
-    requiredMinutes > spec.maxSafeDurationMinutes
-  ) {
+  if (!constraints.activeDuration && spec.maxSafeDurationMinutes !== null) {
     rejectionReasons.push(
       `Active commute (${requiredMinutes} min) exceeds ${spec.maxSafeDurationMinutes} min urban roadside exertion cap.`
     );
   }
 
-  const feasible = rejectionReasons.length === 0;
+  const feasible = Object.values(constraints).every(Boolean);
   const recommendedDepartureTime = feasible
     ? formatMinutesToTime(schoolStartMins - requiredMinutes)
     : null;
@@ -130,6 +141,7 @@ function checkTravelConstraints(
     label: spec.label,
     available,
     feasible,
+    constraints,
     estimatedCostInr: spec.costInr,
     estimatedCostDisplay: formatCurrencyFromInr(spec.costInr, input.budgetCurrency),
     requiredMinutes,
@@ -218,17 +230,36 @@ function selectBestTravelOption(
   return feasible[0] ?? null;
 }
 
+/**
+ * Returns true only when `target` is the sole failing constraint for a travel mode,
+ * ensuring conflict suggestions never claim one change unlocks a multi-failure route.
+ */
+function failsOnlyConstraint(
+  constraints: TravelConstraintChecks,
+  target: keyof TravelConstraintChecks
+): boolean {
+  return (
+    !constraints[target] &&
+    (Object.keys(constraints) as Array<keyof TravelConstraintChecks>).every(
+      (key) => key === target || constraints[key]
+    )
+  );
+}
+
 function buildConstraintConflictPrompts(
   input: HouseholdInput,
   evaluations: TravelOptionEvaluation[],
   availableWindowMinutes: number,
-  pm25UgM3: number
+  pm25UgM3: number,
+  usAqi?: number
 ): ConstraintConflictOption[] {
   const prompts: ConstraintConflictOption[] = [];
   const dailyBudgetInr = convertCurrencyToInr(input.dailyBudget, input.budgetCurrency);
 
-  const busEval = evaluations.find((e) => e.modeId === 'schoolBus');
-  if (busEval && !busEval.available && busEval.estimatedCostInr <= dailyBudgetInr && busEval.requiredMinutes <= availableWindowMinutes) {
+  const busEval = evaluations.find(
+    (e) => e.modeId === 'schoolBus' && failsOnlyConstraint(e.constraints, 'availability')
+  );
+  if (busEval) {
     prompts.push({
       constraint: 'Travel availability (School Bus)',
       suggestion: `Enable School Bus (${busEval.estimatedCostDisplay}, ${busEval.requiredMinutes} min) if a route serves your stop.`
@@ -238,9 +269,7 @@ function buildConstraintConflictPrompts(
   const sharedAlternative = evaluations.find(
     (e) =>
       (e.modeId === 'carpool' || e.modeId === 'metroOrPublicTransit') &&
-      !e.available &&
-      e.estimatedCostInr <= dailyBudgetInr &&
-      e.requiredMinutes <= availableWindowMinutes
+      failsOnlyConstraint(e.constraints, 'availability')
   );
   if (sharedAlternative) {
     prompts.push({
@@ -250,12 +279,7 @@ function buildConstraintConflictPrompts(
   }
 
   const budgetBlocked = evaluations
-    .filter(
-      (e) =>
-        e.available &&
-        e.estimatedCostInr > dailyBudgetInr &&
-        e.requiredMinutes <= availableWindowMinutes
-    )
+    .filter((e) => failsOnlyConstraint(e.constraints, 'budget'))
     .sort((a, b) => a.estimatedCostInr - b.estimatedCostInr);
 
   if (budgetBlocked[0]) {
@@ -267,7 +291,7 @@ function buildConstraintConflictPrompts(
   }
 
   const timingBlocked = evaluations
-    .filter((e) => e.available && e.estimatedCostInr <= dailyBudgetInr && e.requiredMinutes > availableWindowMinutes)
+    .filter((e) => failsOnlyConstraint(e.constraints, 'timing'))
     .sort((a, b) => a.requiredMinutes - b.requiredMinutes);
 
   if (timingBlocked[0]) {
@@ -281,18 +305,23 @@ function buildConstraintConflictPrompts(
     });
   }
 
-  if (pm25UgM3 > PM25_ACTIVE_COMMUTE_CAP_UG_M3) {
+  const hasSingleConstraintUnlock = prompts.length > 0;
+
+  if (
+    pm25UgM3 > PM25_ACTIVE_COMMUTE_CAP_UG_M3 ||
+    (typeof usAqi === 'number' && usAqi > US_AQI_ACTIVE_COMMUTE_CAP)
+  ) {
     prompts.push({
       constraint: 'School schedule / smog advisory',
       suggestion: `With PM2.5 at ${pm25UgM3.toFixed(1)} µg/m³, ask the school about remote smog-day learning or a delayed morning bell while arranging enclosed transport.`
     });
   }
 
-  if (prompts.length === 0) {
+  if (!hasSingleConstraintUnlock) {
     prompts.push({
-      constraint: 'Available travel modes',
+      constraint: 'Available travel modes & constraints',
       suggestion:
-        'Enable at least one enclosed travel option (School Bus, Metro/Transit, Carpool, or Private Car) and confirm budget and departure time.'
+        'No single constraint change unlocks a safe route today; enable an enclosed option (School Bus, Metro/Transit, or Carpool) and confirm budget and departure time.'
     });
   }
 
@@ -350,7 +379,8 @@ function buildRoutineRecommendation(
       input,
       evaluations,
       availableWindowMinutes,
-      airQuality.pm25UgM3
+      airQuality.pm25UgM3,
+      airQuality.usAqi
     );
 
     return {

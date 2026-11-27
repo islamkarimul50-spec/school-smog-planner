@@ -73,11 +73,20 @@ export interface AssumptionEntry {
   value: string;
 }
 
+export interface TravelConstraintChecks {
+  availability: boolean;
+  budget: boolean;
+  timing: boolean;
+  airQualitySafety: boolean;
+  activeDuration: boolean;
+}
+
 export interface TravelOptionEvaluation {
   modeId: TravelModeId;
   label: string;
   available: boolean;
   feasible: boolean;
+  constraints: TravelConstraintChecks;
   estimatedCostInr: number;
   estimatedCostDisplay: string;
   requiredMinutes: number;

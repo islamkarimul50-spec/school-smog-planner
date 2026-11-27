@@ -1,5 +1,8 @@
 import { ApiError, GoogleGenAI } from '@google/genai';
-import { formatCurrencyFromInr } from '../../shared/constants.js';
+import {
+  convertCurrencyToInr,
+  formatCurrencyFromInr
+} from '../../shared/constants.js';
 import { computeAvailableWindowMinutes } from '../../shared/decisionEngine.js';
 import type {
   AiExplanationResult,
@@ -530,9 +533,10 @@ export class GeminiCoachService {
     const q = context.question.toLowerCase();
     const { householdInput, airQuality, planSummary, planDiff } = context;
     const budgetText = formatCurrencyFromInr(
-      householdInput.budgetCurrency === 'INR'
-        ? householdInput.dailyBudget
-        : householdInput.dailyBudget * 84,
+      convertCurrencyToInr(
+        householdInput.dailyBudget,
+        householdInput.budgetCurrency
+      ),
       householdInput.budgetCurrency
     );
 
